@@ -1,113 +1,305 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useState } from "react";
+import Form from "@/app/crm/form";
+import { collection, DocumentData, getDocs,query, where, deleteDoc, doc, updateDoc} from "firebase/firestore";
+import { db } from "@/services/firebase";
+import SubmitButton from "@/components/Button";
+import { updatePassword, validatePassword } from "firebase/auth";
+
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}
 
 export default function Home() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [modifyingId, setModifyingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [errors, setErrors] = useState<{ [key: string]: Partial<Customer> }>({});
+  const [editableFields, setEditableFields] = useState<{ [key: string]: boolean }>({});
+
+  const fetchDocs = async () => {
+    setLoading(true);
+    const collectionRef = collection(db, "Users");
+    const docs = await getDocs(collectionRef);
+    const customersData: Customer[] = [];
+    docs.forEach((doc) => {
+      customersData.push({ id: doc.id, ...doc.data() } as Customer);
+    });
+    setCustomers(customersData);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchDocs();
+  }, []);
+  const validateName = (name: string): string | null => {
+    if (!name) return "Name is required";
+    if (name.length < 3) return "Name should be at least 3 characters long";
+    return null;
+  };
+
+  const validateEmail = (email: string): string | null => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) return "Email is required";
+    if (!emailRegex.test(email)) return "Invalid email format";
+    return null;
+  };
+
+  const validatePhone = (phone: string): string | null => {
+    if (!phone) return "Phone number is required";
+    const phoneRegex = /^\d{10}$/;
+    if (!phone) return "Phone number is required";
+    if (!phoneRegex.test(phone)) return "Phone number should be at exactly 10 digits";
+    return null;
+  };
+
+  const validatePassword = (password: string): string | null => {
+    if (!password) return "Password is required";
+    if (password.length < 6) return "Password should be at least 6 characters";
+    return null;
+  };
+
+  const validateFields = (customer: Customer): Partial<Record<keyof Customer, string>> => {
+    const nameError = validateName(customer.name);
+    const emailError = validateEmail(customer.email);
+    const phoneError = validatePhone(customer.phone);
+    const passwordError = validatePassword(customer.password);
+
+    return {
+      name: nameError !== null ? nameError : undefined,
+      email: emailError !== null ? emailError : undefined,
+      phone: phoneError !== null ? phoneError : undefined,
+      password: passwordError!== null ? passwordError : undefined,
+    };
+  };
+
+  const hasErrors = (errors: Partial<Record<keyof Customer, string>>) => {
+    return !!(errors.name || errors.email || errors.phone ||errors.password);
+  };
+
+  const onDeleteHandler = async (id: string) => {
+    const docRef =doc(db, "Users", id);
+    try {
+      setModifyingId(id);
+      setLoading(true);
+    await deleteDoc(docRef);
+    setLoading(true);
+    //await fetchDocs(); //for locally deleted documents
+    const newCustomers = customers.filter((customer) => customer.id !== id);
+    setCustomers(newCustomers);
+      
+    } catch (error) {
+    alert(error);
+      
+    }finally {
+      setModifyingId(null);
+      setLoading(false);
+    }
+    }
+  // const onUpdateHandler = async (id: string) => {
+  //   const docRef = doc(db, "Users", id);
+  //   const customer = customers.find((customer) => customer.id === id);
+  //   if (customer) {
+  //     const { name, email, phone } = customer;
+  //     const updatedCustomer = { name, email, phone };
+  //     try {
+  //       setLoading(true);
+  //       await updateDoc(docRef, updatedCustomer);
+  //       await fetchDocs();
+  //       setLoading(false);
+  //     } catch (error) {
+  //       alert(error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   }
+  // };
+  const onUpdateHandler = async (id: string, updatedFields: Partial<Customer>) => {
+    const docRef = doc(db, "Users", id);
+    try {
+      setLoading(true);
+      await updateDoc(docRef, updatedFields);
+      await fetchDocs();
+    } catch (error) {
+      alert(error);
+    } finally {
+      setLoading(false);
+      setModifyingId(null);
+    }
+  }
+  ;
+  const handleEditToggle = (customerId: string) => {
+    setEditableFields((prevState) => ({
+      ...prevState,
+      [customerId]: !prevState[customerId],
+    }));
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4 text-center">Customer Relationship Management</h1>
+      <Form onCustomerAdded={fetchDocs} /> {/* Pass the fetchDocs function as a prop */}
+      {loading ? (
+        <p className="text-center">Loading...</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="text-left py-2 px-4 border-b">Customer Name</th>
+                <th className="text-left py-2 px-4 border-b">Customer Email</th>
+                <th className="text-left py-2 px-4 border-b">Customer Phone</th>
+                <th className="text-left py-2 px-4 border-b">Customer Password</th>
+                <th className="text-left py-2 px-4 border-b">Customer Update</th>
+                <th className="text-left py-2 px-4 border-b">Customer Delete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map((customer) => (
+                <tr key={customer.id} className="hover:bg-gray-50">
+                  <td className="py-2 px-4 border-b">
+                    {editableFields[customer.id] ? (
+                      <>
+                        <input
+                          type="text"
+                          value={customer.name}
+                          onChange={(e) => {
+                            const updatedName = e.target.value;
+                            setCustomers((prevCustomers) =>
+                              prevCustomers.map((prevCustomer) =>
+                                prevCustomer.id === customer.id ? { ...prevCustomer, name: updatedName } : prevCustomer
+                              )
+                            );
+                            setErrors((prevErrors) => ({
+                              ...prevErrors,
+                              [customer.id]: { ...prevErrors[customer.id], name: validateName(updatedName) ||undefined },
+                            }));
+                          }}
+                          className={`w-full p-1 border ${errors[customer.id]?.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        />
+                        {errors[customer.id]?.name && <p className="text-red-500 text-sm">{errors[customer.id]?.name}</p>}
+                      </>
+                    ) : (
+                      customer.name
+                    )}
+                  </td>
+                  <td className="py-2 px-4 border-b">
+                    {editableFields[customer.id] ? (
+                      <>
+                        <input
+                          type="email"
+                          value={customer.email}
+                          onChange={(e) => {
+                            const updatedEmail = e.target.value;
+                            setCustomers((prevCustomers) =>
+                              prevCustomers.map((prevCustomer) =>
+                                prevCustomer.id === customer.id ? { ...prevCustomer, email: updatedEmail } : prevCustomer
+                              )
+                            );
+                            setErrors((prevErrors) => ({
+                              ...prevErrors,
+                              [customer.id]: { ...prevErrors[customer.id], email: validateEmail(updatedEmail) ||undefined },
+                            }));
+                          }}
+                          className={`w-full p-1 border ${errors[customer.id]?.email ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        />
+                        {errors[customer.id]?.email && <p className="text-red-500 text-sm">{errors[customer.id]?.email}</p>}
+                      </>
+                    ) : (
+                      customer.email
+                    )}
+                  </td>
+                  <td className="py-2 px-4 border-b">
+                    {editableFields[customer.id] ? (
+                      <>
+                        <input
+                          type="text"
+                          value={customer.phone}
+                          onChange={(e) => {
+                            const updatedPhone = e.target.value;
+                            setCustomers((prevCustomers) =>
+                              prevCustomers.map((prevCustomer) =>
+                                prevCustomer.id === customer.id ? { ...prevCustomer, phone: updatedPhone } : prevCustomer
+                              )
+                            );
+                            setErrors((prevErrors) => ({
+                              ...prevErrors,
+                              [customer.id]: { ...prevErrors[customer.id], phone: validatePhone(updatedPhone) || undefined},
+                            }));
+                          }}
+                          className={`w-full p-1 border ${errors[customer.id]?.phone ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        />
+                        {errors[customer.id]?.phone && <p className="text-red-500 text-sm">{errors[customer.id]?.phone}</p>}
+                      </>
+                    ) : (
+                      customer.phone
+                    )}
+                  </td>
+                  <td className="py-2 px-4 border-b">
+                    {editableFields[customer.id] ? (
+                      <>
+                        <input
+                          type="password"
+                          value={customer.password}
+                          onChange={(e) => {
+                            const updatedPassword = e.target.value;
+                            setCustomers((prevCustomers) =>
+                              prevCustomers.map((prevCustomer) =>
+                                prevCustomer.id === customer.id ? { ...prevCustomer, password: updatedPassword } : prevCustomer
+                              )
+                            );
+                            setErrors((prevErrors) => ({
+                              ...prevErrors,
+                              [customer.id]: { ...prevErrors[customer.id], password: validatePassword(updatedPassword) ||undefined },
+                            }));
+                          }}
+                          className={`w-full p-1 border ${errors[customer.id]?.password ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        />
+                        {errors[customer.id]?.password && <p className="text-red-500 text-sm">{errors[customer.id]?.password}</p>}
+                      </>
+                    ) : (
+                      customer.password
+                    )}
+                  </td>
+                
+                  <td className="py-2 px-4 border-b">
+                    <SubmitButton
+                      label={loading && modifyingId === customer.id ? "Updating..." : "Update"}
+                      onClick={() => {
+                        if (editableFields[customer.id]) {
+                          const customerErrors = validateFields(customer);
+                          if (!hasErrors(customerErrors)) {
+                            onUpdateHandler(customer.id, customers.find((c) => c.id === customer.id) || {});
+                          } else {
+                            setErrors((prevErrors) => ({
+                              ...prevErrors,
+                              [customer.id]: customerErrors,
+                            }));
+                            return;
+                          }
+                        }
+                        handleEditToggle(customer.id);
+                      }}
+                      disabled={loading && modifyingId !== null}
+                    />
+                  </td>
+                  <td className="py-2 px-4 border-b">
+                    <SubmitButton
+                      label={loading && modifyingId === customer.id ? "Deleting..." : "Delete"}
+                      onClick={() => onDeleteHandler(customer.id)}
+                      disabled={loading || modifyingId === customer.id}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+      )}
+    </div>
   );
 }
