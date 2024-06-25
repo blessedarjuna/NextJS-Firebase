@@ -1,7 +1,7 @@
 "use client";
 import SubmitButton from "@/components/Button";
 import InputField from "@/components/InputField";
-import { LOGIN_ROUTE} from "@/constants/routes";
+import { LOGIN_ROUTE, PROFILE_ROUTE, REGISTER_ROUTE } from "@/constants/routes";
 //import Login from "@/app/login/page";
 import useAuthentication from "@/hooks/useAuthentication";
 import { auth } from "@/services/firebase";
@@ -13,11 +13,14 @@ import { addDoc, collection } from 'firebase/firestore'; // Adjust based on your
 import { db } from '@/services/firebase'; // Ensure Firestore is properly initialized
 import React, { useState, useEffect } from "react"; // Add this import
 import { FirebaseError } from "firebase/app"; // Import FirebaseError
+import { useAuth } from "@/provider/AuthProvider";
+
 
 
 const Register = () => {
     const router = useRouter();
     //const [redirecting, setRedirecting] = useState(false);
+    const { googleSignIn } = useAuth();
     useAuthentication();
     const { handleSubmit, register, formState:{errors}, reset} = useRegisterValidation();
     const submitForm = async(values:any) => {
@@ -52,12 +55,21 @@ const Register = () => {
     // if (redirecting) {
     //     return <div>Redirecting...</div>;
     // }
+    const handleGoogleSignIn = async () => {
+        try {
+            await googleSignIn();
+            router.push(PROFILE_ROUTE);
+        } catch (e: any) {
+            console.log("Google Sign-In Error", e.message);
+            alert("Google Sign-In failed. Please try again.");
+        }
+    };
 
     return (
         <div className="h-screen flex justify-center items-center bg-gradient-to-br from-yellow-400/20 via-blue-300 to-purple-400/60">
-            <div className="w-1/2 rounded-md bg-white/30 shadow-lg flex justify-between flex-col">
-                <div className="h-28 w-full justify-center flex items-center">
-                    <span className="text-3xl text-black font-mono font-semibold bg-yellow-300 p-3 rounded-lg">Welcome To Register</span>
+            <div className="w-1/2 h-3/4 rounded-md bg-white/30 shadow-lg flex justify-between flex-col">
+                <div className="h-20 w-full justify-center flex items-center">
+                    <span className=" text-3xl text-black font-mono font-semibold bg-yellow-300 p-3 rounded-lg">Welcome To Register</span>
                 </div>
                 <form onSubmit={handleSubmit(submitForm)} className="h-full w-1/2 mx-auto ">
                     <InputField
@@ -91,9 +103,13 @@ const Register = () => {
                         <Link href={LOGIN_ROUTE}><span className="text-blue-500 font-semibold text-md" > Login Here</span></Link>
                     </span>
                 </div>
+                <div className="h-20 mx-auto">
+                    <button onClick={handleGoogleSignIn} className="text-blue-500 font-semibold text-md">Register with Google</button>
+                </div>
             </div>
         </div>
     );
 }
 
 export default Register;
+
